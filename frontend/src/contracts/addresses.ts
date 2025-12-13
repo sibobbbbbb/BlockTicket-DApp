@@ -1,0 +1,1 @@
+export const TICKET_CONTRACT_ADDRESS = import.meta.env.VITE_TICKET_CONTRACT_ADDRESS || "";
