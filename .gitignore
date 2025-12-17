@@ -3,3 +3,14 @@ node_modules/
 .DS_Store
 dist/
 /context
+
+# Smart Contract specific
+smart-contract/node_modules/
+smart-contract/.env
+smart-contract/artifacts/
+smart-contract/cache/
+smart-contract/typechain-types/
+smart-contract/coverage/
+smart-contract/deployments/*.json
+smart-contract/.deps/
+smart-contract/.states/
