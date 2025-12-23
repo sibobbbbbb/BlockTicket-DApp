@@ -111,11 +111,11 @@ async function main() {
   console.log("\n📝 Next Steps:");
   console.log("   1. Update oracle service with OracleConsumer address");
   console.log("   2. Update frontend with all contract addresses");
-  console.log("   3. Verify contracts on Etherscan:");
-  console.log(`      npx hardhat verify --network ${networkName} ${oracleAddress} "${deployer.address}"`);
-  console.log(`      npx hardhat verify --network ${networkName} ${registryAddress}`);
-  console.log(`      npx hardhat verify --network ${networkName} ${ticketAddress} "BlockTicket" "BTIX" "${deployer.address}" "https://api.blockticket.io/metadata/"`);
-  console.log(`      npx hardhat verify --network ${networkName} ${marketplaceAddress} "${oracleAddress}" "${registryAddress}" "${ticketAddress}"`);
+  console.log("   3. View contracts in Ganache UI:");
+  console.log("      - Open Ganache → CONTRACTS tab");
+  console.log("      - Open Ganache → TRANSACTIONS tab");
+  console.log("      - Source code available in contracts/ folder");
+  
   console.log("\n" + "=".repeat(60) + "\n");
 }
 
