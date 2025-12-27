@@ -10,10 +10,22 @@ export interface TicketEvent {
   isOpen: boolean;
 }
 
+export interface KycStatus {
+  isVerified: boolean;
+  identityHash: string | null;
+  maxTickets: number;
+  blocked: boolean;
+  expiry: number | null;
+  expiryDate: string | null;
+  isExpired: boolean;
+}
+
 export interface Web3State {
   account: string | null;
   chainId: string | null;
   balance: string;
   isConnected: boolean;
   connectWallet: () => Promise<void>;
+  kycStatus: KycStatus | null;
+  refreshKycStatus: () => Promise<void>;
 }

@@ -22,6 +22,7 @@ contract EventRegistry is Ownable {
         uint64 eventStart;        // unix seconds
         uint256 basePriceWei;     // price per ticket (wei)
         bool cancelled;           // event cancellation flag
+        string metadataURI;       // IPFS metadata URI
     }
 
     uint256 public nextEventId = 1;
@@ -34,7 +35,8 @@ contract EventRegistry is Ownable {
         uint64 saleStart,
         uint64 saleEnd,
         uint64 eventStart,
-        uint256 basePriceWei
+        uint256 basePriceWei,
+        string metadataURI
     );
 
     event EventCancelled(uint256 indexed eventId, bool cancelled);
@@ -53,7 +55,8 @@ contract EventRegistry is Ownable {
         uint64 saleStart,
         uint64 saleEnd,
         uint64 eventStart,
-        uint256 basePriceWei
+        uint256 basePriceWei,
+        string memory metadataURI
     ) external returns (uint256 eventId) {
         require(ticketContract != address(0), "EventRegistry: ticket=0");
         require(saleStart < saleEnd, "EventRegistry: bad sale window");
@@ -68,7 +71,8 @@ contract EventRegistry is Ownable {
             saleEnd: saleEnd,
             eventStart: eventStart,
             basePriceWei: basePriceWei,
-            cancelled: false
+            cancelled: false,
+            metadataURI: metadataURI
         });
 
         emit EventCreated(
@@ -78,7 +82,8 @@ contract EventRegistry is Ownable {
             saleStart,
             saleEnd,
             eventStart,
-            basePriceWei
+            basePriceWei,
+            metadataURI
         );
     }
 

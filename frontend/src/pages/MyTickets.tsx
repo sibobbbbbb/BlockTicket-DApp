@@ -1,137 +1,281 @@
-import { useState, useEffect } from 'react';
-import { useWeb3 } from '../context/Web3Context';
-import { Ticket, QrCode, Calendar, MapPin } from 'lucide-react';
-import SkeletonCard from '../components/SkeletonCard';
+import { useState, useEffect } from "react";
+import { ethers } from "ethers";
+import { useWeb3 } from "../context/Web3Context";
+import { 
+    TICKET_NFT_ADDRESS, 
+    MARKETPLACE_ADDRESS, 
+    EVENT_REGISTRY_ADDRESS 
+} from "../contracts/addresses";
+import TicketNFTABI from "../contracts/TicketNFTABI.json";
+import MarketplaceABI from "../contracts/MarketplaceABI.json";
+import EventRegistryABI from "../contracts/EventRegistryABI.json";
+import { Ticket, QrCode, Tag, Loader2, Calendar } from "lucide-react";
+import toast from "react-hot-toast";
+import QRCode from "react-qr-code";
 
-// Interface for owned tickets
-interface OwnedTicket {
+interface MyTicket {
   tokenId: number;
-  eventName: string;
-  eventDate: string;
-  location: string;
-  imageCID: string;
+  eventId: number;
+  name: string;
+  image: string;
+  description: string;
+  eventDate: number;
 }
 
-// Mock Data: User's owned tickets
-const MOCK_OWNED_TICKETS: OwnedTicket[] = [
-  {
-    tokenId: 101,
-    eventName: "Coldplay: Music of the Spheres",
-    eventDate: "15 Nov 2025",
-    location: "GBK Stadium, Jakarta",
-    imageCID: "QmHash..."
-  },
-  {
-    tokenId: 205,
-    eventName: "Tech Conference 2025",
-    eventDate: "20 Dec 2025",
-    location: "Sabuga, Bandung",
-    imageCID: "QmHash..."
-  }
-];
-
 export default function MyTickets() {
-  const { isConnected, account } = useWeb3();
-  const [isLoading, setIsLoading] = useState(false);
-  const [tickets, setTickets] = useState<OwnedTicket[]>([]);
+  const { account, isConnected } = useWeb3();
+  const [tickets, setTickets] = useState<MyTicket[]>([]);
+  const [loading, setLoading] = useState(false);
+  
+  const [showQrFor, setShowQrFor] = useState<number | null>(null);
+  const [qrData, setQrData] = useState<string>("");
+  const [sellId, setSellId] = useState<number | null>(null);
+  const [sellPrice, setSellPrice] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     if (isConnected && account) {
-      setIsLoading(true);
-
-      // TODO: Fetch tickets from blockchain
-      setTimeout(() => {
-        setTickets(MOCK_OWNED_TICKETS);
-        setIsLoading(false);
-      }, 1500);
-    } else {
-      setTickets([]);
+      fetchMyTickets();
     }
   }, [isConnected, account]);
 
-  if (!isConnected) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] text-center space-y-4">
-        <div className="bg-slate-800 p-6 rounded-full">
-            <Ticket size={48} className="text-slate-500" />
-        </div>
-        <h2 className="text-2xl font-bold text-white">Wallet Disconnected</h2>
-        <p className="text-slate-400 max-w-md">
-          Connect your MetaMask to view your collection of NFT tickets.
-        </p>
-      </div>
-    );
-  }
+  const fetchMyTickets = async () => {
+    try {
+      setLoading(true);
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const ticketContract = new ethers.Contract(TICKET_NFT_ADDRESS, TicketNFTABI, provider);
+      const registryContract = new ethers.Contract(EVENT_REGISTRY_ADDRESS, EventRegistryABI, provider);
+
+      const filter = ticketContract.filters.Transfer(null, account);
+      const logs = await ticketContract.queryFilter(filter);
+
+      const uniqueTokenIds = new Set<number>();
+      logs.forEach((log: any) => {
+        uniqueTokenIds.add(Number(log.args[2]));
+      });
+
+      const myTickets: MyTicket[] = [];
+
+      for (const tokenId of uniqueTokenIds) {
+        try {
+            const currentOwner = await ticketContract.ownerOf(tokenId);
+            if (currentOwner.toLowerCase() !== account?.toLowerCase()) continue;
+
+            const eventId = await ticketContract.eventIdOf(tokenId);
+            const eventData = await registryContract.getFunction("getEvent")(eventId);
+            
+            let meta = { name: `Event #${eventId}`, image: "", description: "" };
+            let metadataUri = eventData.metadataURI;
+
+            if (metadataUri && metadataUri.startsWith("ipfs://")) {
+                const cid = metadataUri.replace("ipfs://", "");
+                const gateway = `https://gateway.pinata.cloud/ipfs/${cid}`;
+                try {
+                    const res = await fetch(gateway);
+                    const json = await res.json();
+                    meta = { ...meta, ...json };
+                } catch (e) { console.error("IPFS fetch error", e); }
+            }
+
+            let imageUrl = meta.image;
+            if (imageUrl && imageUrl.startsWith("ipfs://")) {
+                imageUrl = `https://gateway.pinata.cloud/ipfs/${imageUrl.replace("ipfs://", "")}`;
+            }
+
+            myTickets.push({
+                tokenId,
+                eventId: Number(eventId),
+                name: meta.name,
+                image: imageUrl || "https://placehold.co/400?text=No+Image",
+                description: meta.description,
+                eventDate: Number(eventData.eventDate)
+            });
+
+        } catch (err) {
+            console.error(`Error fetching token ${tokenId}`, err);
+        }
+      }
+
+      setTickets(myTickets.reverse());
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to load tickets");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleShowQR = async (ticket: MyTicket) => {
+    try {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+        const timestamp = Math.floor(Date.now() / 1000);
+        const message = `CheckIn-${ticket.tokenId}-${ticket.eventId}-${timestamp}`;
+        const signature = await signer.signMessage(message);
+
+        const qrJson = JSON.stringify({
+            id: ticket.tokenId,
+            eid: ticket.eventId,
+            owner: account,
+            ts: timestamp,
+            sig: signature
+        });
+        setQrData(qrJson);
+        setShowQrFor(ticket.tokenId);
+    } catch (error) {
+        toast.error("Failed to sign QR code");
+    }
+  };
+
+  const handleListForSale = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sellId || !sellPrice) return;
+
+    try {
+        setIsProcessing(true);
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+        
+        const ticketContract = new ethers.Contract(TICKET_NFT_ADDRESS, TicketNFTABI, signer);
+        const marketplaceContract = new ethers.Contract(MARKETPLACE_ADDRESS, MarketplaceABI, signer);
+        const registryContract = new ethers.Contract(EVENT_REGISTRY_ADDRESS, EventRegistryABI, signer);
+
+        const eventId = await ticketContract.eventIdOf(sellId);
+        const eventData = await registryContract.getFunction("getEvent")(eventId);
+        const basePriceWei = eventData.basePriceWei;
+        const inputPriceWei = ethers.parseEther(sellPrice);
+
+        const estimatedCap = (basePriceWei * 110n) / 100n; 
+        
+        if (inputPriceWei > estimatedCap) {
+             const maxEth = ethers.formatEther(estimatedCap);
+             toast.error(`Anti-Scalping: Max price allowed is ${maxEth} ETH`);
+             setIsProcessing(false);
+             return;
+        }
+
+        const isApproved = await ticketContract.isApprovedForAll(account, MARKETPLACE_ADDRESS);
+        if (!isApproved) {
+            const txApprove = await ticketContract.setApprovalForAll(MARKETPLACE_ADDRESS, true);
+            toast.loading("Approving marketplace... (Please wait)", { id: "process" });
+            await txApprove.wait();
+            toast.success("Approval successful!", { id: "process" });
+        }
+
+        const txList = await marketplaceContract.listTicket(sellId, inputPriceWei);
+        toast.loading("Listing ticket...", { id: "process" });
+        await txList.wait();
+
+        toast.success("Ticket listed for sale!", { id: "process" });
+        setSellId(null);
+        fetchMyTickets(); 
+
+    } catch (error: any) {
+        console.error(error);
+        
+        if (error.code === "ACTION_REJECTED") {
+            toast.error("Transaction rejected by user", { id: "process" });
+        } else if (error.message.includes("exceeds cap") || error.message.includes("price")) {
+             toast.error("Price too high! Anti-scalping limit reached.", { id: "process" });
+        } else {
+             toast.error("Failed. Check console for details.", { id: "process" });
+        }
+    } finally {
+        setIsProcessing(false);
+    }
+  };
+
+  if (!isConnected) return <div className="text-center py-20 text-slate-400">Please connect wallet.</div>;
 
   return (
-    <section className="max-w-4xl mx-auto">
-      <div className="flex items-center gap-3 mb-8">
-        <Ticket className="text-cyan-400" size={32} />
-        <h1 className="text-3xl font-bold text-white">My Collections</h1>
-      </div>
+    <div className="max-w-6xl mx-auto px-4 py-10">
+      <h1 className="text-3xl font-bold text-white mb-8 flex items-center gap-2">
+        <Ticket className="text-cyan-400" /> My Ticket Inventory
+      </h1>
 
-      {/* Grid Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-        {isLoading ? (
-          [1, 2].map((n) => <SkeletonCard key={n} />)
-        ) : tickets.length > 0 ? (
-          tickets.map((ticket) => (
-            <div key={ticket.tokenId} className="relative bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col shadow-xl hover:shadow-cyan-900/20 transition group">
-
-              <div className="h-40 bg-slate-800 w-full relative">
-                <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-mono text-cyan-400 border border-cyan-500/30">
-                  ID: #{ticket.tokenId}
-                </div>
-                <div className="w-full h-full flex items-center justify-center text-slate-600">
-                    [Poster Image Placeholder]
-                </div>
+      {loading ? (
+        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-cyan-500" size={40}/></div>
+      ) : tickets.length === 0 ? (
+        <div className="text-center py-20 bg-slate-900/50 rounded-2xl border border-slate-800">
+            <p className="text-slate-400">You don't have any tickets yet.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {tickets.map((ticket) => (
+            <div key={ticket.tokenId} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden hover:border-cyan-500/30 transition flex flex-col group">
+              <div className="h-48 bg-slate-800 relative overflow-hidden">
+                 <img 
+                    src={ticket.image} 
+                    alt={ticket.name} 
+                    className="w-full h-full object-cover group-hover:scale-110 transition duration-500"
+                 />
+                 <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-xs text-white font-mono border border-white/10">
+                    Ticket #{ticket.tokenId}
+                 </div>
               </div>
 
-              <div className="p-5 flex-1 flex flex-col justify-between relative">
-                <div className="absolute -top-3 left-0 w-full h-6 flex justify-between px-4">
-                </div>
-
-                <div>
-                    <h2 className="text-xl font-bold text-white mb-2 group-hover:text-cyan-400 transition">
-                        {ticket.eventName}
-                    </h2>
-
-                    <div className="space-y-2 text-sm text-slate-400 mb-6">
-                        <div className="flex items-center gap-2">
-                            <Calendar size={14} className="text-cyan-600" />
-                            <span>{ticket.eventDate}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <MapPin size={14} className="text-cyan-600" />
-                            <span>{ticket.location}</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* QR Code Section */}
-                <div className="mt-4 pt-4 border-t border-slate-800 border-dashed flex items-center justify-between">
-                    <div className="text-xs text-slate-500">
-                        <p>Scan at venue</p>
-                        <p className="font-mono text-slate-300">VALID</p>
-                    </div>
-                    <div className="bg-white p-1 rounded">
-                        <QrCode size={48} className="text-black" />
-                    </div>
-                </div>
+              <div className="p-5 flex-1 flex flex-col">
+                 <h3 className="text-lg font-bold text-white mb-1 line-clamp-1">{ticket.name}</h3>
+                 
+                 <div className="flex items-center gap-2 text-xs text-slate-400 mb-4">
+                    <Calendar size={12} />
+                    {new Date(ticket.eventDate * 1000).toLocaleDateString()}
+                 </div>
+                 
+                 <div className="mt-auto grid grid-cols-2 gap-3">
+                    <button 
+                        onClick={() => handleShowQR(ticket)}
+                        className="bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition"
+                    >
+                        <QrCode size={16} /> QR Code
+                    </button>
+                    <button 
+                        onClick={() => setSellId(ticket.tokenId)}
+                        className="bg-cyan-900/20 hover:bg-cyan-900/40 text-cyan-400 border border-cyan-900/50 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition"
+                    >
+                        <Tag size={16} /> Resell
+                    </button>
+                 </div>
               </div>
             </div>
-          ))
-        ) : (
-          <div className="col-span-full py-12 text-center border-2 border-dashed border-slate-800 rounded-xl">
-             <p className="text-slate-500 mb-4">You don't own any tickets yet.</p>
-             <button className="text-cyan-400 hover:text-cyan-300 underline font-semibold">
-                Buy Tickets Now
-             </button>
-          </div>
-        )}
+          ))}
+        </div>
+      )}
 
-      </div>
-    </section>
+      {showQrFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setShowQrFor(null)}>
+            <div className="bg-white p-6 rounded-2xl max-w-sm w-full text-center" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-xl font-bold text-slate-900 mb-2">Scan to Enter</h3>
+                <div className="bg-white p-2 rounded-lg border-2 border-slate-100 inline-block">
+                    <QRCode value={qrData} size={200} />
+                </div>
+                <p className="text-xs text-slate-400 mt-4 font-mono break-all">Sig: {qrData.slice(-20)}</p>
+            </div>
+        </div>
+      )}
+
+      {sellId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+             <div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl max-w-sm w-full">
+                <h3 className="text-xl font-bold text-white mb-4">List for Resale</h3>
+                <form onSubmit={handleListForSale}>
+                    <label className="text-xs font-bold text-slate-500 uppercase">Price (ETH)</label>
+                    <input 
+                        type="number" step="0.0001" required autoFocus
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-white focus:border-cyan-500 outline-none mb-4 mt-1"
+                        placeholder="0.02"
+                        value={sellPrice} onChange={(e) => setSellPrice(e.target.value)}
+                    />
+                    <div className="flex gap-3">
+                        <button type="button" onClick={() => setSellId(null)} className="flex-1 bg-slate-800 text-white py-3 rounded-xl font-bold">Cancel</button>
+                        <button type="submit" disabled={isProcessing} className="flex-1 bg-cyan-600 text-white py-3 rounded-xl font-bold flex justify-center gap-2">
+                            {isProcessing ? <Loader2 className="animate-spin"/> : "List Item"}
+                        </button>
+                    </div>
+                </form>
+             </div>
+        </div>
+      )}
+    </div>
   );
 }

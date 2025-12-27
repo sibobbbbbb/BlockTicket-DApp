@@ -1,40 +1,45 @@
 import toast from 'react-hot-toast';
 
-export const LOCAL_NETWORK_CONFIG = {
-  chainId: '0x539',
-  chainName: 'Localhost 8545',
+export const NETWORK_CONFIG = {
+  chainId: import.meta.env.VITE_CHAIN_ID,
+  chainName: 'Ganache Local',
   nativeCurrency: {
     name: 'ETH',
     symbol: 'ETH',
     decimals: 18,
   },
-  rpcUrls: ['http://127.0.0.1:8545'],
+  rpcUrls: [import.meta.env.VITE_RPC_URL],
+  blockExplorerUrls: [],
 };
 
 export const switchNetwork = async () => {
-  if (!window.ethereum) return;
+  if (!window.ethereum) {
+    toast.error("MetaMask not found!");
+    return;
+  }
 
-  const toastId = toast.loading("Switching network...");
+  const toastId = toast.loading("Connecting to Ganache...");
 
   try {
     await window.ethereum.request({
       method: 'wallet_switchEthereumChain',
-      params: [{ chainId: LOCAL_NETWORK_CONFIG.chainId }],
+      params: [{ chainId: NETWORK_CONFIG.chainId }],
     });
-    toast.success("Switched to Private Chain Localhost", { id: toastId });
+    toast.success("Connected to Ganache Network", { id: toastId });
   } catch (error: any) {
     if (error.code === 4902) {
       try {
         await window.ethereum.request({
           method: 'wallet_addEthereumChain',
-          params: [LOCAL_NETWORK_CONFIG],
+          params: [NETWORK_CONFIG],
         });
-        toast.success("Network Localhost added!", { id: toastId });
+        toast.success("Ganache Network added!", { id: toastId });
       } catch (addError) {
         toast.error("Failed to add network", { id: toastId });
       }
     } else {
-      toast.dismiss(toastId);
+      console.error(error);
+      toast.error("Failed to switch network", { id: toastId });
     }
   }
 };

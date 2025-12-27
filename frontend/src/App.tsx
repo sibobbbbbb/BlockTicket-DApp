@@ -5,6 +5,8 @@ import MainLayout from './layouts/MainLayout';
 import Home from './pages/Home';
 import Admin from './pages/Admin';
 import MyTickets from './pages/MyTickets';
+import Resale from './pages/Resale';
+import Scanner from './pages/Scanner';
 
 function App() {
   return (
@@ -19,6 +21,8 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/my-tickets" element={<MyTickets />} />
+            <Route path="/resale" element={<Resale />} />
+            <Route path="/scanner" element={<Scanner />} />
           </Routes>
         </MainLayout>
       </BrowserRouter>

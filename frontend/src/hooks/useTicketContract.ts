@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { useWeb3 } from '../context/Web3Context';
-import { TICKET_CONTRACT_ADDRESS } from '../contracts/addresses';
-import TicketABI from '../contracts/TicketContractABI.json';
+import { TICKET_NFT_ADDRESS } from '../contracts/addresses';
+import TicketABI from '../contracts/TicketNFTABI.json';
 
 export const useTicketContract = () => {
   const { account } = useWeb3();
@@ -22,7 +22,7 @@ export const useTicketContract = () => {
           }
 
           const ticketContract = new ethers.Contract(
-            TICKET_CONTRACT_ADDRESS,
+            TICKET_NFT_ADDRESS,
             TicketABI,
             runner
           );
