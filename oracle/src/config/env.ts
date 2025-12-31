@@ -11,7 +11,7 @@ const envSchema = z.object({
     .default("development"),
 
   // Blockchain
-  RPC_URL: z.string().url().default("http://127.0.0.1:8545"),
+  RPC_URL: z.string().url().default("http://127.0.0.1:7545"),
   CHAIN_ID: z.coerce.number().default(1337),
   ORACLE_PRIVATE_KEY: z
     .string()
