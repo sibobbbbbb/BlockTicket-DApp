@@ -64,6 +64,25 @@ export const Web3Provider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   useEffect(() => {
+    const checkConnection = async () => {
+      if (window.ethereum) {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          
+          if (accounts.length > 0) {
+            await connectWallet(); 
+            console.log("Auto-connected to:", accounts[0]);
+          }
+        } catch (error) {
+          console.error("Failed to auto-connect:", error);
+        }
+      }
+    };
+
+    checkConnection();
+  }, []);
+
+  useEffect(() => {
     if (window.ethereum) {
        window.ethereum.on('accountsChanged', (accounts: string[]) => {
         if (accounts.length > 0) {
